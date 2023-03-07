@@ -205,20 +205,27 @@ export const spec = {
    */
   interpretResponse: (response, request) => {
     const body = response.body || response;
+    const isNative = body && body.slots && isArray(body.slots) && !!body.slots.find((slot) => slot.native);
 
-    if (publisherTagAvailable()) {
+    if (publisherTagAvailable() && !isNative) {
       // eslint-disable-next-line no-undef
       const adapter = Criteo.PubTag.Adapters.Prebid.GetAdapter(request);
       if (adapter) {
         return adapter.interpretResponse(body, request);
       }
     }
-
     const bids = [];
 
     if (body && body.slots && isArray(body.slots)) {
-      body.slots.forEach(slot => {
-        const bidRequest = find(request.bidRequests, b => b.adUnitCode === slot.impid && (!b.params.zoneId || parseInt(b.params.zoneId) === slot.zoneid));
+      body.slots.forEach((slot) => {
+        const mediaType = slot.native ? NATIVE : slot.video ? VIDEO : BANNER;
+        const bidRequest = find(
+          request.bidRequests,
+          (b) =>
+            b.adUnitCode === slot.impid &&
+            Object.keys(b.mediaTypes).includes(mediaType) &&
+            (!b.params.zoneId || parseInt(b.params.zoneId) === slot.zoneid)
+        );
         const bidId = bidRequest.bidId;
         const bid = {
           requestId: bidId,

@@ -1,0 +1,97 @@
+<html>
+  <head>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, shrink-to-fit=no"
+    />
+    <script async src="http://localhost:9999/build/dev/prebid.js"></script>
+    <script>
+      var adUnits = [
+        {
+          code: "test-div",
+          mediaTypes: {
+            banner: {
+              sizes: [[300, 250]],
+            },
+          },
+          bids: [
+            {
+              bidder: "missena",
+              params: {
+                apiKey: "PA-47872986",
+                test: "smart-banner",
+                custom: {
+                  providerName: "bidule",
+                },
+              },
+            },
+          ],
+        },
+      ];
+
+      var pbjs = pbjs || {};
+      pbjs.que = pbjs.que || [];
+    </script>
+
+    <script>
+      pbjs.que.push(function () {
+        pbjs.setConfig({
+          debugging: {
+            enabled: true,
+          },
+          gvlMapping: {
+            missena: 687,
+            smilewanted: 639,
+          },
+          bidderTimeout: 2000,
+          userSync: {
+            syncDelay: 1000,
+            userIds: [{ name: "criteo" }],
+            filterSettings: {
+              iframe: { bidders: "*", filter: "include" },
+              image: { bidders: "*", filter: "include" },
+            },
+          },
+        });
+        pbjs.addAdUnits(adUnits);
+      });
+
+      // you could instead pass an array of adUnits
+      // to getHighestCpmBids() if desired
+      function renderAllAdUnits() {
+        var winners = pbjs.getHighestCpmBids();
+        for (var i = 0; i < winners.length; i++) {
+          renderOne(winners[i]);
+        }
+      }
+
+      function renderOne(winningBid) {
+        if (winningBid && winningBid.adId) {
+          var div = document.getElementById(winningBid.adUnitCode);
+          if (div) {
+            let iframe = document.createElement("iframe");
+            iframe.frameBorder = "0";
+            div.appendChild(iframe);
+            var iframeDoc = iframe.contentWindow.document;
+            pbjs.renderAd(iframeDoc, winningBid.adId);
+          }
+        }
+      }
+    </script>
+
+    <script>
+      pbjs.que.push(function () {
+        pbjs.requestBids({
+          timeout: 2000,
+          bidsBackHandler: renderAllAdUnits,
+        });
+      });
+    </script>
+  </head>
+
+  <body>
+    <h2>Missena Test Page</h2>
+
+    <div id="test-div"></div>
+  </body>
+</html>

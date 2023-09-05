@@ -96,7 +96,7 @@ export const spec = {
       response.requestId = JSON.parse(bidRequest.data).request_id;
       Object.assign(response, {
         cpm: fastBid.cpm,
-        ad: '<script>window.top.__MISSENA__.renderFromBid(window.top.MISSENA_FAST_BID)</script>',
+        ad: '<script>window.top.__MISSENA__.renderFromBid(window.top.MISSENA_FAST_BID, "criteo-prebid-native")</script>',
         creativeId: '',
         currency: '',
         dealId: '',
@@ -115,7 +115,7 @@ export const spec = {
     syncOptions,
     serverResponses,
     gdprConsent,
-    uspConsent
+    uspConsent,
   ) {
     if (!syncOptions.iframeEnabled) {
       return [];
@@ -166,7 +166,7 @@ export const spec = {
     const blob = new Blob([JSON.stringify(body)], headers);
     navigator.sendBeacon(
       `https://${hostname}/v1/events?t=${bid.params[0].apiKey}`,
-      blob
+      blob,
     );
     logInfo('Missena - Bid won', bid);
   },

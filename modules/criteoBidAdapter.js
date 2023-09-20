@@ -205,8 +205,9 @@ export const spec = {
    */
   interpretResponse: (response, request) => {
     const body = response.body || response;
+    const isNative = body && body.slots && isArray(body.slots) && !!body.slots.find((slot) => slot.native);
 
-    if (publisherTagAvailable()) {
+    if (publisherTagAvailable() && !isNative) {
       // eslint-disable-next-line no-undef
       const adapter = Criteo.PubTag.Adapters.Prebid.GetAdapter(request);
       if (adapter) {

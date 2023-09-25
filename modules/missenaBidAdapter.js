@@ -1,5 +1,5 @@
-import { formatQS, logInfo } from '../src/utils.js';
-import { BANNER } from '../src/mediaTypes.js';
+import { isFn, deepAccess, formatQS, logInfo, parseSizesInput } from '../src/utils.js';
+import { BANNER, NATIVE, VIDEO } from '../src/mediaTypes.js';
 import { registerBidder } from '../src/adapters/bidderFactory.js';
 import { getStorageManager } from '../src/storageManager.js';
 
@@ -9,6 +9,57 @@ const EVENTS_DOMAIN = 'events.missena.io';
 const EVENTS_DOMAIN_DEV = 'events.staging.missena.xyz';
 
 export const storage = getStorageManager({ bidderCode: BIDDER_CODE });
+
+/* Get mediatype from bidRequest */
+function getMediatype(bidRequest) {
+  if (deepAccess(bidRequest, 'mediaTypes.banner')) {
+    return BANNER;
+  }
+  if (deepAccess(bidRequest, 'mediaTypes.video')) {
+    return VIDEO;
+  }
+  if (deepAccess(bidRequest, 'mediaTypes.native')) {
+    return NATIVE;
+  }
+}
+
+function getSize(sizesArray) {
+  const firstSize = sizesArray[0];
+  if (typeof firstSize !== 'string') return {};
+
+  const [widthStr, heightStr] = firstSize.toUpperCase().split('X');
+  return {
+    width: parseInt(widthStr, 10) || undefined,
+    height: parseInt(heightStr, 10) || undefined
+  };
+}
+
+/* Get Floor price information */
+function getFloor(bidRequest, size, mediaType) {
+  if (!isFn(bidRequest.getFloor)) {
+    return deepAccess(bidRequest, 'params.bidfloor', 0);
+  }
+
+  const bidFloors = bidRequest.getFloor({
+    currency: 'USD',
+    mediaType,
+    size: [ size.width, size.height ]
+  });
+
+  if (!isNaN(bidFloors.floor)) {
+    return bidFloors;
+  }
+}
+
+function getSizeArray(bid) {
+  let inputSize = deepAccess(bid, 'mediaTypes.banner.sizes') || bid.sizes || [];
+
+  if (Array.isArray(bid.params?.size)) {
+    inputSize = !Array.isArray(bid.params.size[0]) ? [bid.params.size] : bid.params.size;
+  }
+
+  return parseSizesInput(inputSize);
+}
 
 export const spec = {
   aliases: ['msna'],
@@ -68,6 +119,12 @@ export const spec = {
       if (window.MISSENA_SECOND_BID && window.MISSENA_SECOND_BID.cpm) {
         payload.floor = window.MISSENA_SECOND_BID.cpm;
       }
+
+      let mediatype = getMediatype(bidRequest);
+      let sizesArray = getSizeArray(bidRequest);
+      let size = getSize(sizesArray);
+
+      payload.prebidFloor = getFloor(bidRequest, size, mediatype);
 
       return {
         method: 'POST',

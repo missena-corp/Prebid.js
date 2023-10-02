@@ -5,7 +5,9 @@ import {
   logInfo,
   parseSizesInput,
 } from '../src/utils.js';
-import { BANNER, NATIVE, VIDEO } from '../src/mediaTypes.js';
+import { config } from '../src/config.js';
+
+import { BANNER } from '../src/mediaTypes.js';
 import { registerBidder } from '../src/adapters/bidderFactory.js';
 import { getStorageManager } from '../src/storageManager.js';
 
@@ -15,19 +17,6 @@ const EVENTS_DOMAIN = 'events.missena.io';
 const EVENTS_DOMAIN_DEV = 'events.staging.missena.xyz';
 
 export const storage = getStorageManager({ bidderCode: BIDDER_CODE });
-
-/* Get mediatype from bidRequest */
-function getMediatype(bidRequest) {
-  if (deepAccess(bidRequest, 'mediaTypes.banner')) {
-    return BANNER;
-  }
-  if (deepAccess(bidRequest, 'mediaTypes.video')) {
-    return VIDEO;
-  }
-  if (deepAccess(bidRequest, 'mediaTypes.native')) {
-    return NATIVE;
-  }
-}
 
 function getSize(sizesArray) {
   const firstSize = sizesArray[0];
@@ -41,14 +30,16 @@ function getSize(sizesArray) {
 }
 
 /* Get Floor price information */
-function getFloor(bidRequest, size, mediaType) {
+function getFloor(bidRequest) {
   if (!isFn(bidRequest.getFloor)) {
-    return deepAccess(bidRequest, 'params.bidfloor');
+    return {};
   }
+  const sizesArray = getSizeArray(bidRequest);
+  const size = getSize(sizesArray);
 
   const bidFloors = bidRequest.getFloor({
     currency: 'USD',
-    mediaType,
+    mediaType: BANNER,
     size: [size.width, size.height],
   });
 
@@ -56,7 +47,6 @@ function getFloor(bidRequest, size, mediaType) {
     return bidFloors;
   }
 }
-
 function getSizeArray(bid) {
   let inputSize = deepAccess(bid, 'mediaTypes.banner.sizes') || bid.sizes || [];
 
@@ -139,12 +129,10 @@ export const spec = {
         payload.floor = window.MISSENA_SECOND_BID.cpm;
       }
 
-      const mediatype = getMediatype(bidRequest);
-      const sizesArray = getSizeArray(bidRequest);
-      const size = getSize(sizesArray);
-      const bidFloor = getFloor(bidRequest, size, mediatype);
+      const bidFloor = getFloor(bidRequest);
       payload.floor = bidFloor?.floor;
-      payload.currency = bidFloor?.currency;
+      payload.floor_currency = bidFloor?.currency;
+      payload.currency = config.getConfig('currency.adServerCurrency') || 'EUR';
 
       return {
         method: 'POST',
@@ -245,8 +233,8 @@ export const spec = {
         t: bid.params[0].apiKey,
         placement: bid.params[0].placement,
         commission: {
-          value: bid.cpm,
-          currency: bid.currency,
+          value: bid.originalCpm,
+          currency: bid.originalCurrency,
         },
       },
     });

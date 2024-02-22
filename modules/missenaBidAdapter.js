@@ -2,6 +2,7 @@ import {
   isFn,
   deepAccess,
   formatQS,
+  generateUUID,
   logInfo,
   parseSizesInput,
 } from '../src/utils.js';
@@ -17,6 +18,7 @@ const EVENTS_DOMAIN = 'events.missena.io';
 const EVENTS_DOMAIN_DEV = 'events.staging.missena.xyz';
 
 export const storage = getStorageManager({ bidderCode: BIDDER_CODE });
+window.msna_ik = window.msna_ik || generateUUID();
 
 function getSize(sizesArray) {
   const firstSize = sizesArray[0];
@@ -95,9 +97,11 @@ export const spec = {
   buildRequests: function (validBidRequests, bidderRequest) {
     const capKey = `missena.missena.capper.remove-bubble.${validBidRequests[0]?.params.apiKey}`;
     const capping = JSON.parse(storage.getDataFromLocalStorage(capKey));
+    const referer = bidderRequest?.refererInfo?.topmostLocation;
     if (
       typeof capping?.expiry === 'number' &&
-      new Date().getTime() < capping?.expiry
+      new Date().getTime() < capping?.expiry &&
+      (!capping?.referer || capping?.referer == referer)
     ) {
       logInfo('Missena - Capped');
       return [];
@@ -107,6 +111,7 @@ export const spec = {
     return validBidRequests.map((bidRequest) => {
       const payload = {
         adunit: bidRequest.adUnitCode,
+        ik: window.msna_ik,
         request_id: bidRequest.bidId,
         timeout: bidderRequest.timeout,
       };
@@ -134,7 +139,12 @@ export const spec = {
       if (bidRequest.params.isInternal) {
         payload.is_internal = bidRequest.params.isInternal;
       }
+      if (bidRequest.ortb2?.device?.ext?.cdep) {
+        payload.cdep = bidRequest.ortb2?.device?.ext?.cdep;
+      }
       payload.userEids = bidRequest.userIdAsEids || [];
+      payload.version = '$prebid.version$';
+
       if (window.MISSENA_SECOND_BID && window.MISSENA_SECOND_BID.cpm) {
         payload.floor = window.MISSENA_SECOND_BID.cpm;
       }

@@ -4,6 +4,7 @@ import {
   formatQS,
   generateUUID,
   logInfo,
+  safeJSONParse,
   parseSizesInput,
 } from '../src/utils.js';
 import { config } from '../src/config.js';
@@ -11,6 +12,13 @@ import { config } from '../src/config.js';
 import { BANNER } from '../src/mediaTypes.js';
 import { registerBidder } from '../src/adapters/bidderFactory.js';
 import { getStorageManager } from '../src/storageManager.js';
+
+/**
+ * @typedef {import('../src/adapters/bidderFactory.js').BidRequest} BidRequest
+ * @typedef {import('../src/adapters/bidderFactory.js').Bid} Bid
+ * @typedef {import('../src/adapters/bidderFactory.js').ServerResponse} ServerResponse
+ * @typedef {import('../src/adapters/bidderFactory.js').validBidRequests} validBidRequests
+ */
 
 const BIDDER_CODE = 'missena';
 const ENDPOINT_URL = 'https://bid.missena.io/';
@@ -96,7 +104,7 @@ export const spec = {
    */
   buildRequests: function (validBidRequests, bidderRequest) {
     const capKey = `missena.missena.capper.remove-bubble.${validBidRequests[0]?.params.apiKey}`;
-    const capping = JSON.parse(storage.getDataFromLocalStorage(capKey));
+    const capping = safeJSONParse(storage.getDataFromLocalStorage(capKey));
     const referer = bidderRequest?.refererInfo?.topmostLocation;
     if (
       typeof capping?.expiry === 'number' &&
@@ -126,6 +134,11 @@ export const spec = {
         payload.consent_string = bidderRequest.gdprConsent.consentString;
         payload.consent_required = bidderRequest.gdprConsent.gdprApplies;
       }
+
+      if (bidderRequest && bidderRequest.uspConsent) {
+        payload.us_privacy = bidderRequest.uspConsent;
+      }
+
       const baseUrl = bidRequest.params.baseUrl || ENDPOINT_URL;
       if (bidRequest.params.test) {
         payload.test = bidRequest.params.test;
@@ -155,6 +168,7 @@ export const spec = {
       payload.floor = bidFloor?.floor;
       payload.floor_currency = bidFloor?.currency;
       payload.currency = config.getConfig('currency.adServerCurrency') || 'EUR';
+      payload.schain = bidRequest.schain;
 
       return {
         method: 'POST',

@@ -12,6 +12,7 @@ import { config } from '../src/config.js';
 import { BANNER } from '../src/mediaTypes.js';
 import { registerBidder } from '../src/adapters/bidderFactory.js';
 import { getStorageManager } from '../src/storageManager.js';
+import { isAutoplayEnabled } from '../libraries/autoplayDetection/autoplay.js';
 
 /**
  * @typedef {import('../src/adapters/bidderFactory.js').BidRequest} BidRequest
@@ -122,6 +123,7 @@ export const spec = {
         ik: window.msna_ik,
         request_id: bidRequest.bidId,
         timeout: bidderRequest.timeout,
+        ...bidRequest.params,
       };
 
       if (bidderRequest && bidderRequest.refererInfo) {
@@ -139,9 +141,11 @@ export const spec = {
         payload.us_privacy = bidderRequest.uspConsent;
       }
 
-      const baseUrl = bidRequest.params.baseUrl || ENDPOINT_URL;
+      if (bidRequest.params.isInternal) {
+        payload.is_internal = bidRequest.params.isInternal;
+      }
 
-      payload.params = bidRequest.params;
+      const baseUrl = bidRequest.params.baseUrl || ENDPOINT_URL;
 
       if (bidRequest.ortb2?.device?.ext?.cdep) {
         payload.cdep = bidRequest.ortb2?.device?.ext?.cdep;
@@ -158,6 +162,9 @@ export const spec = {
       payload.floor_currency = bidFloor?.currency;
       payload.currency = config.getConfig('currency.adServerCurrency') || 'EUR';
       payload.schain = bidRequest.schain;
+      payload.coppa = config.getConfig('coppa') === true ? 1 : 0;
+      payload.autoplay = isAutoplayEnabled() === true ? 1 : 0;
+      payload.params = bidRequest.params;
 
       return {
         method: 'POST',

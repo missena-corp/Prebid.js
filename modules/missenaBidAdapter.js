@@ -123,8 +123,9 @@ export const spec = {
         ik: window.msna_ik,
         request_id: bidRequest.bidId,
         timeout: bidderRequest.timeout,
-        ...bidRequest.params,
       };
+
+      const baseUrl = bidRequest.params.baseUrl || ENDPOINT_URL;
 
       if (bidderRequest && bidderRequest.refererInfo) {
         // TODO: is 'topmostLocation' the right value here?
@@ -140,12 +141,6 @@ export const spec = {
       if (bidderRequest && bidderRequest.uspConsent) {
         payload.us_privacy = bidderRequest.uspConsent;
       }
-
-      if (bidRequest.params.isInternal) {
-        payload.is_internal = bidRequest.params.isInternal;
-      }
-
-      const baseUrl = bidRequest.params.baseUrl || ENDPOINT_URL;
 
       if (bidRequest.ortb2?.device?.ext?.cdep) {
         payload.cdep = bidRequest.ortb2?.device?.ext?.cdep;

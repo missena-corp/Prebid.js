@@ -6,6 +6,7 @@ import {
   logInfo,
   safeJSONParse,
   parseSizesInput,
+  getWindowTop
 } from '../src/utils.js';
 import { config } from '../src/config.js';
 
@@ -28,6 +29,19 @@ const EVENTS_DOMAIN_DEV = 'events.staging.missena.xyz';
 
 export const storage = getStorageManager({ bidderCode: BIDDER_CODE });
 window.msna_ik = window.msna_ik || generateUUID();
+
+
+function getViewportSize() {
+  try {
+    const win = getWindowTop();
+    let { innerHeight, innerWidth } = win;
+    innerHeight = innerHeight || win.document.documentElement.clientWidth || win.document.body.clientWidth;
+    innerWidth = innerWidth || win.document.documentElement.clientHeight || win.document.body.clientHeight
+    return { width: innerWidth, height: innerHeight };
+  } catch (e) {
+    return {};
+  }
+}
 
 function getSize(sizesArray) {
   const firstSize = sizesArray[0];
@@ -160,6 +174,7 @@ export const spec = {
       payload.coppa = config.getConfig('coppa') === true ? 1 : 0;
       payload.autoplay = isAutoplayEnabled() === true ? 1 : 0;
       payload.params = bidRequest.params;
+      payload.viewport = getViewportSize();
 
       return {
         method: 'POST',

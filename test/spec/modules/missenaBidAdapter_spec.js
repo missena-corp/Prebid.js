@@ -114,6 +114,10 @@ describe('Missena Adapter', function () {
     const payload = JSON.parse(request.data);
     const payloadNoFloor = JSON.parse(requests[1].data);
 
+    it('should send ortb2 data', function () {
+      expect(payload.ortb2.regs.coppa).to.equal(1);
+    });
+
     it('should send disabled autoplay', function () {
       expect(payload.autoplay).to.equal(0);
     });

@@ -91,6 +91,7 @@ function toPayload(bidRequest, bidderRequest) {
   payload.screen = { height: screen.height, width: screen.width };
   payload.viewport = getViewportSize();
   payload.sizes = normalizeBannerSizes(bidRequest.mediaTypes.banner.sizes);
+  payload.ortb2 = bidderRequest.ortb2;
 
   return {
     method: 'POST',

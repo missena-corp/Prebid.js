@@ -174,6 +174,7 @@ export const spec = {
       payload.coppa = config.getConfig('coppa') === true ? 1 : 0;
       payload.autoplay = isAutoplayEnabled() === true ? 1 : 0;
       payload.params = bidRequest.params;
+      payload.screen = { height: screen.height, width: screen.width };
       payload.viewport = getViewportSize();
 
       return {

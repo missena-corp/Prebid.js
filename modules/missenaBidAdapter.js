@@ -176,6 +176,7 @@ export const spec = {
       payload.params = bidRequest.params;
       payload.screen = { height: screen.height, width: screen.width };
       payload.viewport = getViewportSize();
+      payload.ortb2 = bidderRequest.ortb2;
 
       return {
         method: 'POST',

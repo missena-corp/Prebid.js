@@ -140,25 +140,6 @@ export const spec = {
       };
 
       const baseUrl = bidRequest.params.baseUrl || ENDPOINT_URL;
-
-      if (bidderRequest && bidderRequest.refererInfo) {
-        // TODO: is 'topmostLocation' the right value here?
-        payload.referer = bidderRequest.refererInfo.topmostLocation;
-        payload.referer_canonical = bidderRequest.refererInfo.canonicalUrl;
-      }
-
-      if (bidderRequest && bidderRequest.gdprConsent) {
-        payload.consent_string = bidderRequest.gdprConsent.consentString;
-        payload.consent_required = bidderRequest.gdprConsent.gdprApplies;
-      }
-
-      if (bidderRequest && bidderRequest.uspConsent) {
-        payload.us_privacy = bidderRequest.uspConsent;
-      }
-
-      if (bidRequest.ortb2?.device?.ext?.cdep) {
-        payload.cdep = bidRequest.ortb2?.device?.ext?.cdep;
-      }
       payload.userEids = bidRequest.userIdAsEids || [];
       payload.version = '$prebid.version$';
 
@@ -171,10 +152,8 @@ export const spec = {
       payload.floor_currency = bidFloor?.currency;
       payload.currency = config.getConfig('currency.adServerCurrency') || 'EUR';
       payload.schain = bidRequest.schain;
-      payload.coppa = config.getConfig('coppa') === true ? 1 : 0;
       payload.autoplay = isAutoplayEnabled() === true ? 1 : 0;
       payload.params = bidRequest.params;
-      payload.screen = { height: screen.height, width: screen.width };
       payload.viewport = getViewportSize();
       payload.ortb2 = bidderRequest.ortb2;
 

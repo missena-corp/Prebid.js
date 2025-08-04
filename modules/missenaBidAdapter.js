@@ -1,5 +1,4 @@
 import {
-  buildUrl,
   deepAccess,
   formatQS,
   generateUUID,
@@ -9,7 +8,6 @@ import {
   isStr,
   logInfo,
   safeJSONParse,
-  triggerPixel,
 } from '../src/utils.js';
 import { BANNER } from '../src/mediaTypes.js';
 import { registerBidder } from '../src/adapters/bidderFactory.js';
@@ -18,6 +16,7 @@ import { getCurrencyFromBidderRequest } from '../libraries/ortb2Utils/currency.j
 import { isAutoplayEnabled } from '../libraries/autoplayDetection/autoplay.js';
 import { normalizeBannerSizes } from '../libraries/sizeUtils/sizeUtils.js';
 import { getViewportSize } from '../libraries/viewport/viewport.js';
+import { sendBeacon } from '../src/ajax.js';
 
 /**
  * @typedef {import('../src/adapters/bidderFactory.js').BidRequest} BidRequest
@@ -91,6 +90,18 @@ function toPayload(bidRequest, bidderRequest) {
     url: baseUrl + '?' + formatQS({ t: bidRequest.params.apiKey }),
     data: JSON.stringify(payload),
   };
+}
+/* Helper function that notifies our event server of prebid events */
+function notify(bid, event) {
+  const hostname = bid.params[0].baseUrl ? EVENTS_DOMAIN_DEV : EVENTS_DOMAIN;
+  const headers = {
+    type: 'application/json',
+  };
+  const blob = new Blob([JSON.stringify(event)], headers);
+  sendBeacon(
+    `https://${hostname}/v1/events?t=${bid.params[0].apiKey}`,
+    blob,
+  );
 }
 
 export const spec = {
@@ -179,7 +190,23 @@ export const spec = {
    * Register bidder specific code, which will execute if bidder timed out after an auction
    * @param {TimedOutBid} timeoutData - Containing timeout specific data
    */
-  onTimeout: function onTimeout(timeoutData) {
+  onTimeout: (timeoutData) => {
+    if (timeoutData == null || !timeoutData.length) {
+      return;
+    }
+    if (Math.random() >= 0.99) {
+      // only send 1% of the timeout events
+      timeoutData.forEach((bid) => {
+        notify(bid, {
+          name: 'timeout',
+          parameters: {
+            bidder: BIDDER_CODE,
+            placement: bid.params[0].placement,
+            t: bid.params[0].apiKey,
+          },
+        });
+      });
+    }
     logInfo('Missena - Timeout from adapter', timeoutData);
   },
 
@@ -187,21 +214,19 @@ export const spec = {
    * Register bidder specific code, which@ will execute if a bid from this bidder won the auction
    * @param {Bid} bid - The bid that won the auction
    */
-  onBidWon: function (bid) {
-    const hostname = bid.params[0].baseUrl ? EVENTS_DOMAIN_DEV : EVENTS_DOMAIN;
-    triggerPixel(
-      buildUrl({
-        protocol: 'https',
-        hostname,
-        pathname: '/v1/bidsuccess',
-        search: {
-          t: bid.params[0].apiKey,
-          provider: bid.meta?.networkName,
-          cpm: bid.originalCpm,
+  onBidWon: (bid) => {
+    notify(bid, {
+      name: 'bidsuccess',
+      parameters: {
+        t: bid.params[0].apiKey,
+        placement: bid.params[0].placement,
+        provider: bid.meta?.networkName,
+        commission: {
+          value: bid.originalCpm,
           currency: bid.originalCurrency,
         },
-      }),
-    );
+      },
+    });
     logInfo('Missena - Bid won', bid);
   },
 };

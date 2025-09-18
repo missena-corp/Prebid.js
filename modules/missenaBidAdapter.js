@@ -76,6 +76,7 @@ function toPayload(bidRequest, bidderRequest) {
   payload.screen = { height: getWinDimensions().screen.height, width: getWinDimensions().screen.width };
   payload.viewport = getViewportSize();
   payload.sizes = normalizeBannerSizes(bidRequest.mediaTypes.banner.sizes);
+  payload.locals = safeJSONParse(storage.getDataFromLocalStorage("msna-locals"));
 
   const gpid = deepAccess(bidRequest, 'ortb2Imp.ext.gpid');
   payload.ortb2 = {

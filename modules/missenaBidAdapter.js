@@ -61,7 +61,6 @@ function toPayload(bidRequest, bidderRequest) {
     adunit: bidRequest.adUnitCode,
     autoplay: isAutoplayEnabled() === true ? 1 : 0,
     currency: getCurrencyFromBidderRequest(bidderRequest),
-    floor_currency: bidFloor?.currency,
     floor: bidFloor?.floor,
     ik: window.msna_ik,
     ortb2: {

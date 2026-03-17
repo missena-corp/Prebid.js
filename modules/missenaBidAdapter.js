@@ -54,38 +54,38 @@ function getFloor(bidRequest) {
 
 /* Helper function that converts the prebid data to the payload expected by our servers */
 function toPayload(bidRequest, bidderRequest) {
+  const bidFloor = getFloor(bidRequest);
+  const gpid = deepAccess(bidRequest, 'ortb2Imp.ext.gpid');
+
   const payload = {
     adunit: bidRequest.adUnitCode,
+    autoplay: isAutoplayEnabled() === true ? 1 : 0,
+    currency: getCurrencyFromBidderRequest(bidderRequest),
+    floor: bidFloor?.floor,
     ik: window.msna_ik,
+    ortb2: {
+      ...(bidderRequest.ortb2 || {}),
+      ext: {
+        ...(bidderRequest.ortb2?.ext || {}),
+        ...(isStr(gpid) && !isEmpty(gpid) ? { gpid } : {}),
+      },
+    },
+    params: bidRequest.params,
     request_id: bidRequest.bidId,
+    schain: bidRequest?.ortb2?.source?.ext?.schain,
+    screen: {
+      height: getWinDimensions().screen.height,
+      width: getWinDimensions().screen.width,
+    },
+    sizes: normalizeBannerSizes(bidRequest.mediaTypes.banner.sizes),
+    time: new Date().getTime(),
     timeout: bidderRequest.timeout,
+    userEids: bidRequest.userIdAsEids || [],
+    version: 'prebid.js@$prebid.version$',
+    viewport: getViewportSize(),
   };
 
   const baseUrl = bidRequest.params.baseUrl || ENDPOINT_URL;
-  payload.params = bidRequest.params;
-
-  payload.userEids = bidRequest.userIdAsEids || [];
-  payload.version = 'prebid.js@$prebid.version$';
-
-  const bidFloor = getFloor(bidRequest);
-  payload.floor = bidFloor?.floor;
-  payload.floor_currency = bidFloor?.currency;
-  payload.currency = getCurrencyFromBidderRequest(bidderRequest);
-  payload.schain = bidRequest?.ortb2?.source?.ext?.schain;
-  payload.autoplay = isAutoplayEnabled() === true ? 1 : 0;
-  payload.screen = { height: getWinDimensions().screen.height, width: getWinDimensions().screen.width };
-  payload.viewport = getViewportSize();
-  payload.sizes = normalizeBannerSizes(bidRequest.mediaTypes.banner.sizes);
-
-  const gpid = deepAccess(bidRequest, 'ortb2Imp.ext.gpid');
-  payload.ortb2 = {
-    ...(bidderRequest.ortb2 || {}),
-    ext: {
-      ...(bidderRequest.ortb2?.ext || {}),
-      ...(isStr(gpid) && !isEmpty(gpid) ? { gpid } : {}),
-    },
-  };
-
   return {
     method: 'POST',
     url: baseUrl + '?' + formatQS({ t: bidRequest.params.apiKey }),

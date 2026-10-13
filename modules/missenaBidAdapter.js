@@ -13,6 +13,7 @@ import {
 } from '../src/utils.js';
 import { BANNER } from '../src/mediaTypes.js';
 import { registerBidder } from '../src/adapters/bidderFactory.js';
+import { sendBeacon } from '../src/ajax.js';
 import { getStorageManager } from '../src/storageManager.js';
 import { getCurrencyFromBidderRequest } from '../libraries/ortb2Utils/currency.js';
 import { isAutoplayEnabled } from '../libraries/autoplayDetection/autoplay.js';
@@ -26,12 +27,17 @@ import { getViewportSize } from '../libraries/viewport/viewport.js';
  * @typedef {import('../src/adapters/bidderFactory.js').ServerResponse} ServerResponse
  * @typedef {import('../src/adapters/bidderFactory.js').validBidRequests} validBidRequests
  * @typedef {import('../src/adapters/bidderFactory.js').TimedOutBid} TimedOutBid
+ * @typedef {import('../src/adapters/bidderFactory.js').BidderError} BidderError
  */
 
 const BIDDER_CODE = 'missena';
+const GVLID = 687;
 const ENDPOINT_URL = 'https://bid.missena.io/';
 const EVENTS_DOMAIN = 'events.missena.io';
 const EVENTS_DOMAIN_DEV = 'events.staging.missena.xyz';
+const EVENT_SOURCE = 'prebid.js';
+const EVENT_TIMEOUT = 'timeout';
+const EVENT_BID_ERROR = 'bid-error';
 
 export const storage = getStorageManager({ bidderCode: BIDDER_CODE });
 window.msna_ik = window.msna_ik || generateUUID();
@@ -50,6 +56,36 @@ function getFloor(bidRequest) {
   if (!isNaN(bidFloors?.floor)) {
     return bidFloors;
   }
+}
+
+/* Events are sent to the same collector as the on-page renderer, so timeouts and
+ * network errors show up next to wins and impressions in Missena's dashboards. */
+function eventsHostname(params) {
+  return params?.baseUrl ? EVENTS_DOMAIN_DEV : EVENTS_DOMAIN;
+}
+
+function sendEvent(name, params, parameters) {
+  const apiKey = params?.apiKey;
+  if (!apiKey) {
+    return false;
+  }
+  const url = buildUrl({
+    protocol: 'https',
+    hostname: eventsHostname(params),
+    pathname: '/v1/events',
+    search: { t: apiKey, ik: window.msna_ik },
+  });
+  const body = JSON.stringify({
+    from: EVENT_SOURCE,
+    name,
+    parameters: {
+      bidder: BIDDER_CODE,
+      ik: window.msna_ik,
+      version: 'prebid.js@$prebid.version$',
+      ...parameters,
+    },
+  });
+  return sendBeacon(url, new Blob([body], { type: 'application/json' }));
 }
 
 /* Helper function that converts the prebid data to the payload expected by our servers */
@@ -94,9 +130,9 @@ function toPayload(bidRequest, bidderRequest) {
 }
 
 export const spec = {
-  aliases: ['msna'],
+  aliases: [{ code: 'msna', gvlid: GVLID }],
   code: BIDDER_CODE,
-  gvlid: 687,
+  gvlid: GVLID,
   supportedMediaTypes: [BANNER],
 
   /**
@@ -185,10 +221,35 @@ export const spec = {
   },
   /**
    * Register bidder specific code, which will execute if bidder timed out after an auction
-   * @param {TimedOutBid} timeoutData - Containing timeout specific data
+   * @param {TimedOutBid[]} timeoutData - Containing timeout specific data
    */
   onTimeout: function onTimeout(timeoutData) {
     logInfo('Missena - Timeout from adapter', timeoutData);
+    (timeoutData || []).forEach((bid) => {
+      sendEvent(EVENT_TIMEOUT, bid.params, {
+        adunit: bid.adUnitCode,
+        auction_id: bid.auctionId,
+        request_id: bid.bidId,
+        timeout: bid.timeout,
+      });
+    });
+  },
+
+  /**
+   * Register bidder specific code, which will execute if the bid request failed
+   * (network error, non-2xx status) instead of timing out
+   * @param {BidderError} data - The error and the bidder request it belongs to
+   */
+  onBidderError: function onBidderError({ error, bidderRequest }) {
+    logInfo('Missena - Bidder error', error, bidderRequest);
+    const bids = bidderRequest?.bids || [];
+    sendEvent(EVENT_BID_ERROR, bids[0]?.params, {
+      adunits: bids.map((bid) => bid.adUnitCode),
+      auction_id: bidderRequest?.auctionId,
+      request_ids: bids.map((bid) => bid.bidId),
+      status: error?.status,
+      reason: error?.timedOut ? 'timeout' : error?.statusText || error?.reason?.message || 'network',
+    });
   },
 
   /**

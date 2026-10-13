@@ -5,6 +5,7 @@ import { config } from 'src/config.js';
 import * as autoplay from 'libraries/autoplayDetection/autoplay.js';
 import { getWinDimensions } from '../../../src/utils.js';
 import { getGlobal } from '../../../src/prebidGlobal.js';
+import * as ajax from 'src/ajax.js';
 
 const REFERRER = 'https://referer';
 const REFERRER2 = 'https://referer2';
@@ -97,6 +98,10 @@ describe('Missena Adapter', function () {
   describe('codes', function () {
     it('should return a bidder code of missena', function () {
       expect(spec.code).to.equal('missena');
+    });
+    it('should register the msna alias with the same GVL ID', function () {
+      expect(spec.gvlid).to.equal(687);
+      expect(spec.aliases).to.deep.equal([{ code: 'msna', gvlid: 687 }]);
     });
   });
 
@@ -425,6 +430,133 @@ describe('Missena Adapter', function () {
       expect(syncUrl.searchParams.get('us_privacy')).to.equal('1YNN');
       expect(syncUrl.searchParams.get('gpp')).to.equal(gppConsent.gppString);
       expect(syncUrl.searchParams.get('gpp_sid')).to.equal('7');
+    });
+  });
+
+  describe('events', function () {
+    let beaconStub;
+    const eventsUrl = 'https://events.missena.io/v1/events';
+    const stagingEventsUrl = 'https://events.staging.missena.xyz/v1/events';
+
+    beforeEach(function () {
+      beaconStub = sinon.stub(ajax, 'sendBeacon').returns(true);
+    });
+    afterEach(function () {
+      beaconStub.restore();
+    });
+
+    async function sentEvent(call = 0) {
+      const [url, blob] = beaconStub.getCall(call).args;
+      expect(blob).to.be.an.instanceof(Blob);
+      expect(blob.type).to.equal('application/json');
+      return { url: new URL(url), body: JSON.parse(await blob.text()) };
+    }
+
+    const timedOutBid = {
+      bidder: 'missena',
+      bidId: bidId,
+      auctionId: 'auction-1',
+      adUnitCode: 'ad-unit-1',
+      timeout: 1500,
+      params: { apiKey: API_KEY },
+    };
+
+    describe('onTimeout', function () {
+      it('should send one timeout event per timed out bid', async function () {
+        spec.onTimeout([timedOutBid, { ...timedOutBid, bidId: 'def', adUnitCode: 'ad-unit-2' }]);
+
+        expect(beaconStub.callCount).to.equal(2);
+        const first = await sentEvent(0);
+        expect(first.url.origin + first.url.pathname).to.equal(eventsUrl);
+        expect(first.url.searchParams.get('t')).to.equal(API_KEY);
+        expect(first.url.searchParams.get('ik')).to.equal(window.msna_ik);
+        expect(first.body.from).to.equal('prebid.js');
+        expect(first.body.name).to.equal('timeout');
+        expect(first.body.parameters).to.include({
+          bidder: 'missena',
+          adunit: 'ad-unit-1',
+          auction_id: 'auction-1',
+          request_id: bidId,
+          timeout: 1500,
+          ik: window.msna_ik,
+        });
+        expect(first.body.parameters.version).to.match(/^prebid\.js@/);
+
+        const second = await sentEvent(1);
+        expect(second.body.parameters.adunit).to.equal('ad-unit-2');
+        expect(second.body.parameters.request_id).to.equal('def');
+      });
+
+      it('should use the staging collector when a baseUrl is configured', async function () {
+        spec.onTimeout([{ ...timedOutBid, params: { apiKey: API_KEY, baseUrl: 'https://bid.staging.missena.xyz/' } }]);
+
+        const { url } = await sentEvent();
+        expect(url.origin + url.pathname).to.equal(stagingEventsUrl);
+      });
+
+      it('should not send anything without an api key', function () {
+        spec.onTimeout([{ ...timedOutBid, params: {} }]);
+        spec.onTimeout(undefined);
+        expect(beaconStub.called).to.be.false;
+      });
+    });
+
+    describe('onBidderError', function () {
+      const errorBidderRequest = {
+        bidderCode: 'missena',
+        auctionId: 'auction-2',
+        bids: [
+          { bidId: bidId, adUnitCode: 'ad-unit-1', params: { apiKey: API_KEY } },
+          { bidId: 'def', adUnitCode: 'ad-unit-2', params: { apiKey: API_KEY } },
+        ],
+      };
+
+      it('should report http errors with their status', async function () {
+        spec.onBidderError({
+          error: { status: 503, statusText: 'Service Unavailable', timedOut: false },
+          bidderRequest: errorBidderRequest,
+        });
+
+        expect(beaconStub.calledOnce).to.be.true;
+        const { url, body } = await sentEvent();
+        expect(url.origin + url.pathname).to.equal(eventsUrl);
+        expect(url.searchParams.get('t')).to.equal(API_KEY);
+        expect(body.name).to.equal('bid-error');
+        expect(body.parameters).to.deep.include({
+          bidder: 'missena',
+          adunits: ['ad-unit-1', 'ad-unit-2'],
+          auction_id: 'auction-2',
+          request_ids: [bidId, 'def'],
+          status: 503,
+          reason: 'Service Unavailable',
+        });
+      });
+
+      it('should report network failures', async function () {
+        spec.onBidderError({
+          error: { status: 0, statusText: '', reason: new TypeError('Failed to fetch'), timedOut: false },
+          bidderRequest: errorBidderRequest,
+        });
+
+        const { body } = await sentEvent();
+        expect(body.parameters.status).to.equal(0);
+        expect(body.parameters.reason).to.equal('Failed to fetch');
+      });
+
+      it('should flag aborted requests as timeouts', async function () {
+        spec.onBidderError({
+          error: { status: 0, statusText: '', timedOut: true },
+          bidderRequest: errorBidderRequest,
+        });
+
+        const { body } = await sentEvent();
+        expect(body.parameters.reason).to.equal('timeout');
+      });
+
+      it('should not send anything without bids', function () {
+        spec.onBidderError({ error: { status: 500 }, bidderRequest: { bids: [] } });
+        expect(beaconStub.called).to.be.false;
+      });
     });
   });
 });
